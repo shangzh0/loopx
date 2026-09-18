@@ -17,6 +17,7 @@ const showcaseCatalogPath = "docs/showcases/showcase-catalog.json";
 const projectionFixturePath = "examples/goal-channel-frontstage-fixture.py";
 const installerScriptPath = "scripts/install-from-github.sh";
 const deepSweBehaviorArticlePath = "benchmark/deepswe/behavior-discovery/index.html";
+const deepSweSolArticlePath = "apps/presentation/site/public/benchmarks/deepswe-sol/index.html";
 const homepageEvidenceAssets = [
   "docs/assets/long-running-loop-openviking-trajectory.png",
   "docs/assets/long-running-loop-ml-experiment-trajectory.png",
@@ -135,7 +136,7 @@ async function copyHomepage(siteDir, base) {
 
 async function copyPublicSiteRoutes(siteDir) {
   const homepage = resolve(siteDir, "index.html");
-  for (const route of ["benchmarks/swe-marathon"]) {
+  for (const route of ["benchmarks/swe-marathon", "benchmarks/lhtb"]) {
     const routeDir = resolve(siteDir, route);
     await mkdir(routeDir, { recursive: true });
     await copyFile(homepage, resolve(routeDir, "index.html"));
@@ -267,6 +268,7 @@ async function writeShareReadme(outDir, base, interactivePages) {
   const homepageUrl = base;
   const frontstageUrl = `${base}frontstage/`;
   const sweMarathonBriefUrl = `${base}benchmarks/swe-marathon/`;
+  const lhtbBriefUrl = `${base}benchmarks/lhtb/`;
   const deepSweBehaviorArticleUrl = `${base}benchmarks/deepswe/behavior-discovery/`;
   const previewBlock = base === "/"
     ? `## Try It Locally
@@ -282,6 +284,7 @@ Then open the homepage or showcase:
 http://127.0.0.1:8080${homepageUrl}
 http://127.0.0.1:8080${frontstageUrl}
 http://127.0.0.1:8080${sweMarathonBriefUrl}
+http://127.0.0.1:8080${lhtbBriefUrl}
 http://127.0.0.1:8080${deepSweBehaviorArticleUrl}
 \`\`\`
 `
@@ -297,6 +300,7 @@ Hosted entries:
 ${homepageUrl}
 ${frontstageUrl}
 ${sweMarathonBriefUrl}
+${lhtbBriefUrl}
 ${deepSweBehaviorArticleUrl}
 \`\`\`
 `;
@@ -321,7 +325,9 @@ ${previewBlock}
   catalog-declared interactive case pages.
 - Homepage source: \`apps/presentation/site\`.
 - SWE-Marathon research brief: \`${sweMarathonBriefUrl}\`, built from the pinned public-safe aggregate and case-insight projection under \`benchmark/swe-marathon/\`.
+- LHTB research brief: \`${lhtbBriefUrl}\`, built from the public-safe five-arm aggregate under \`benchmark/LHTB/studies/five-arm-gpt56sol-max/\`.
 - DeepSWE behavior discoveries: \`${deepSweBehaviorArticleUrl}\`, copied byte-for-byte from the reviewed standalone article at \`${deepSweBehaviorArticlePath}\`.
+- DeepSWE × Sol research brief: \`${base}benchmarks/deepswe-sol/\`, a static historical-study interpretation from \`${deepSweSolArticlePath}\`.
 - Homepage evidence assets: ${homepageEvidenceAssets.map((path) => `\`${path}\``).join(", ")}.
 - Personal Workspace demo and guide: docs/guides/personal-workspace-user-guide/.
 - Legacy Frontstage URLs redirect to the case directory without loading a dashboard or forwarding status parameters.
@@ -343,7 +349,9 @@ async function writeManifest(outDir, base, interactivePages) {
     status_fixture: `site/${statusFileName}`,
     homepage_entry: "site/index.html",
     swe_marathon_brief_entry: "site/benchmarks/swe-marathon/index.html",
+    lhtb_brief_entry: "site/benchmarks/lhtb/index.html",
     deepswe_behavior_article_entry: "site/benchmarks/deepswe/behavior-discovery/index.html",
+    deepswe_sol_article_entry: "site/benchmarks/deepswe-sol/index.html",
     installer_entry: "site/install.sh",
     frontstage_entry: "site/frontstage/index.html",
     frontstage_redirect: "docs/showcases/index.en.html",
@@ -351,7 +359,9 @@ async function writeManifest(outDir, base, interactivePages) {
     content_sources: {
       public_homepage: "apps/presentation/site",
       swe_marathon_brief: "benchmark/swe-marathon",
+      lhtb_brief: "benchmark/LHTB/studies/five-arm-gpt56sol-max",
       deepswe_behavior_article: deepSweBehaviorArticlePath,
+      deepswe_sol_article: deepSweSolArticlePath,
       installer_script: installerScriptPath,
       homepage_evidence_assets: homepageEvidenceAssets,
       primary_public_story: showcaseCatalogPath,
@@ -470,6 +480,7 @@ async function main() {
     site_dir: siteDir,
     homepage_url: args.base,
     swe_marathon_brief_url: `${args.base}benchmarks/swe-marathon/`,
+    lhtb_brief_url: `${args.base}benchmarks/lhtb/`,
     deepswe_behavior_article_url: `${args.base}benchmarks/deepswe/behavior-discovery/`,
     frontstage_url: `${args.base}frontstage/`,
     status_fixture: `site/${statusFileName}`,

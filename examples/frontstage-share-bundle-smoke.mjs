@@ -6,6 +6,7 @@ import { readFile, readdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateBilingualBlog } from "./blog-bilingual-index-smoke.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = resolve("/tmp", "loopx-frontstage-share-bundle-smoke");
@@ -117,24 +118,42 @@ const siteDir = resolve(outDir, "site");
 assertExists(resolve(siteDir, "index.html"));
 assertExists(resolve(siteDir, "frontstage/index.html"));
 assertExists(resolve(siteDir, "benchmarks/swe-marathon/index.html"));
+assertExists(resolve(siteDir, "benchmarks/lhtb/index.html"));
 assertExists(resolve(siteDir, "benchmarks/deepswe/behavior-discovery/index.html"));
+// Static research articles must remain readable and navigable in the shipped
+// bundle without falling back to the homepage SPA.
+for (const route of ["benchmarks/deepswe-sol/"]) {
+  const pagePath = resolve(siteDir, route, "index.html");
+  const html = await readFile(pagePath, "utf8");
+  if (!/<h1\b/.test(html) || html.includes('<div id="root">') || html.includes("<script")) {
+    throw new Error(`Research article must ship static content: ${route}`);
+  }
+  for (const match of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
+    const target = match[1].split(/[?#]/)[0];
+    if (target && !nonBundleReferencePattern.test(target)) assertRelativeReferenceExists(pagePath, target);
+  }
+}
 // Editorial pages must ship their text and locale navigation without an SPA
 // fallback or client-side execution, including on repository-base hosting.
-const blogArticle = "from-one-shot-agents-to-long-horizon-control/";
+const blogDir = resolve(siteDir, "blog");
+const { articleSlugs: englishBlogArticles } = await validateBilingualBlog(blogDir);
 for (const locale of ["", "zh/"]) {
-  const articles = locale ? ["", blogArticle, "agent-facing-kanban/"] : ["", blogArticle];
+  const articles = ["", ...englishBlogArticles.map((slug) => `${slug}/`)];
   for (const article of articles) {
     const pagePath = resolve(siteDir, "blog", locale, article, "index.html");
     assertExists(pagePath);
     const html = await readFile(pagePath, "utf8");
     const language = locale ? "zh-CN" : "en";
-    if (!html.includes(`<html lang="${language}">`) || !html.includes("<h1>") || html.includes("<script")) {
+    const interactive = article === "application-scenarios/";
+    if (!html.includes(`<html lang="${language}">`) || !html.includes("<h1>") || (!interactive && html.includes("<script"))) {
       throw new Error(`Blog must provide static content in ${language}: ${pagePath}`);
     }
-    // A single-language article must not advertise a nonexistent translation.
-    const alternates = article === "agent-facing-kanban/" ? [] : ["en", "zh-CN", "x-default"];
-    for (const hreflang of alternates) {
-      if (!html.includes(`hreflang="${hreflang}"`)) throw new Error(`Missing Blog language alternate: ${hreflang}`);
+    if (interactive) {
+      const scripts = [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script>/g)].map((match) => match[0]);
+      if (scripts.length !== 1 || scripts[0] !== '<script src="presentation.js" defer></script>') {
+        throw new Error("Application article must keep enhancement in its local deferred script");
+      }
+      assertExists(resolve(dirname(pagePath), "presentation.js"));
     }
     const stylesheet = html.match(/<link rel="stylesheet" href="([^"]+)"/);
     if (!stylesheet) throw new Error("Blog stylesheet is missing");
@@ -214,6 +233,10 @@ const homepageStyles = await readFile(resolve(repoRoot, "apps/presentation/site/
 const benchmarkHtml = await readFile(resolve(siteDir, "benchmarks/swe-marathon/index.html"), "utf8");
 if (benchmarkHtml !== homepageHtml) {
   throw new Error("SWE-Marathon static route must reuse the compiled public-site entry");
+}
+const lhtbHtml = await readFile(resolve(siteDir, "benchmarks/lhtb/index.html"), "utf8");
+if (lhtbHtml !== homepageHtml) {
+  throw new Error("LHTB static route must reuse the compiled public-site entry");
 }
 const deepSweBehaviorHtml = await readFile(
   resolve(siteDir, "benchmarks/deepswe/behavior-discovery/index.html"),
@@ -348,6 +371,7 @@ if (manifest.base !== "/loopx/") {
 if (
   manifest.homepage_entry !== "site/index.html" ||
   manifest.swe_marathon_brief_entry !== "site/benchmarks/swe-marathon/index.html" ||
+  manifest.lhtb_brief_entry !== "site/benchmarks/lhtb/index.html" ||
   manifest.deepswe_behavior_article_entry !== "site/benchmarks/deepswe/behavior-discovery/index.html" ||
   manifest.frontstage_entry !== "site/frontstage/index.html" ||
   manifest.installer_entry !== "site/install.sh"
@@ -359,6 +383,9 @@ if (manifest.content_sources?.public_homepage !== "apps/presentation/site") {
 }
 if (manifest.content_sources?.swe_marathon_brief !== "benchmark/swe-marathon") {
   throw new Error(`manifest benchmark brief source mismatch: ${JSON.stringify(manifest.content_sources)}`);
+}
+if (manifest.content_sources?.lhtb_brief !== "benchmark/LHTB/studies/five-arm-gpt56sol-max") {
+  throw new Error(`manifest LHTB brief source mismatch: ${JSON.stringify(manifest.content_sources)}`);
 }
 if (
   manifest.content_sources?.deepswe_behavior_article !==
@@ -438,6 +465,9 @@ if (!readmeText.includes("frontstage/")) {
 }
 if (!readmeText.includes("benchmarks/swe-marathon/")) {
   throw new Error("share bundle README must publish the SWE-Marathon research brief entry");
+}
+if (!readmeText.includes("benchmarks/lhtb/")) {
+  throw new Error("share bundle README must publish the LHTB research brief entry");
 }
 if (!readmeText.includes("benchmarks/deepswe/behavior-discovery/")) {
   throw new Error("share bundle README must publish the DeepSWE behavior article entry");
