@@ -173,6 +173,10 @@ def resolve_cli_registry(
 	registry_was_configured = user_supplied_registry(raw_argv) or bool(
 		os.environ.get("LOOPX_REGISTRY")
 	)
+	if args.command == "update" and getattr(args, "update_action", None) == "activate":
+		# Service activation reads its route from the loaded original manager.
+		# It neither opens Goal authority nor guesses a default Chat store.
+		return registry_path, registry_was_configured
 	if args.command == "quota" and getattr(args, "quota_command", None) in {"context-read", "replan-view"}:
 		from .cli_commands.context_machine import has_explicit_context_read_source
 
