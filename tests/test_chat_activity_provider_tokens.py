@@ -34,4 +34,20 @@ def test_provider_tokens_in_commands_are_masked_before_replay(token: str) -> Non
 
     for step in (command, thought):
         assert token not in json.dumps(step)
+        assert "deploy --config" in step["title"]
         assert "***" in step["title"]
+
+
+def test_a_masked_step_stays_clean_in_the_reopened_store(tmp_path) -> None:
+    from loopx.chat_store import ChatSessionStore
+
+    token = "np" + "m_" + "aB3dE5gH7jK9mN1pQ3sT5vX7zA9cE1gI3kM5"
+    text = f"deploy --config {token}"
+    step = CodexActivitySteps().started(_command(text))
+    store = ChatSessionStore(tmp_path / "store")
+    store.append_event("session", "turn", kind="agent.phase", payload={"step": step})
+    store.flush_events("session", "turn")
+
+    replay = ChatSessionStore(tmp_path / "store").events_after("session", "turn", None)
+    assert token not in json.dumps(replay)
+    assert [row["payload"]["step"] for row in replay] == [step]
