@@ -3,10 +3,11 @@
 This research adapter calls SForge's native `run_agent`. Task images, prompts,
 submission cooldowns, judge isolation and scoring remain owned by the pinned
 EdgeBench checkout. Best-only adds host capture/admission scheduling; native and
-blind retain native automatic evaluation. The CLI defaults to the shared
+blind retain native automatic evaluation. The CLI defaults to a reviewed commit
+from the shared
 [EdgeBench integration branch](https://github.com/huangruiteng/EdgeBench/tree/codex/edgebench-integration),
 maintained jointly by `huangruiteng` and `loopx-agent`. The canonical repository
-and branch live in [`source-default.json`](source-default.json).
+and revision/compatibility-patch pair live in [`source-default.json`](source-default.json).
 Run the controller on Linux with Docker and native SForge
 iptables permissions; a macOS Docker socket alone does not provide that boundary.
 
