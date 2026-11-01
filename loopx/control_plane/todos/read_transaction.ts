@@ -58,7 +58,10 @@ export async function readHistoricalTodoProjection(input: JsonObject): Promise<J
 
 async function todoListPayload(input: JsonObject, original: JsonObject[], fields: JsonObject, canonical: JsonObject): Promise<JsonObject> {
   const query = requireJsonObject(input.query, "Todo list query");
+  const fullText = query.full_text === undefined ? false : requireBoolean(query.full_text, "full_text");
   const summary = query.summary === undefined ? false : requireBoolean(query.summary, "Todo summary view");
+  if (fullText && (query.thin === true || query.json_references === true || summary))
+    throw new EffectRuntimeRequestError("Full Todo body reads cannot use compact presentation");
   if (summary && (query.thin || query.todo_id)) throw new EffectRuntimeRequestError("Todo summary cannot be combined with thin or exact reads");
   const sourceName = "file_authority";
   const roles: unknown[] = query.role == null ? ["user", "agent"] : [query.role];
@@ -86,7 +89,21 @@ async function todoListPayload(input: JsonObject, original: JsonObject[], fields
     }
   }
   let todos = projection.todos as JsonObject[];
-  if (query.todo_id && todos.length === 1) {
+  // Restore only already-selected bodies. Scope, status, archive and limits
+  // remain the existing owner's decisions; all bodies share this source head.
+  if (fullText) {
+    const identity = (row: JsonObject) => JSON.stringify([row.todo_id, row.role, row.archive_state ?? "active"]);
+    const bodies = new Map<string, JsonObject | null>();
+    for (const row of original) {
+      const key = identity(row);
+      bodies.set(key, bodies.has(key) ? null : row);
+    }
+    for (const item of todos) {
+      const source = bodies.get(identity(item));
+      if (!source) throw new Error("Todo detail cannot recover an unambiguous full source body");
+      item.text = String(source.text ?? "");
+    }
+  } else if (query.todo_id && todos.length === 1) {
     const item = todos[0]!;
     const matching = original.filter(row => row.todo_id === query.todo_id && row.role === item.role &&
       (row.archive_state ?? "active") === (item.archive_state ?? "active"));
@@ -94,7 +111,7 @@ async function todoListPayload(input: JsonObject, original: JsonObject[], fields
     item.text = String(matching[0]!.text ?? "");
   }
   const matchedCount = todos.length;
-  const hot = query.read_scope !== "completed_history" && query.agent_id && query.limit == null &&
+  const hot = !fullText && query.read_scope !== "completed_history" && query.agent_id && query.limit == null &&
     query.role == null && query.status == null && query.todo_id == null;
   if (hot && !summary) {
     const summaries = requireJsonObject(projection.summaries, "Todo summaries");
@@ -104,7 +121,7 @@ async function todoListPayload(input: JsonObject, original: JsonObject[], fields
   }
   const payload: JsonObject = {ok: true, dry_run: true, read_only: true, command: "list", goal_id: query.goal_id,
     role: query.role ?? "all", status_filter: query.status ?? null, source: sourceName, todo_count: matchedCount,
-    todos, state_file: query.state_file, project: query.project ?? null,
+    todos, ...(fullText ? {full_text: true} : {}), state_file: query.state_file, project: query.project ?? null,
     authority_read: {source_authority: canonical.source_authority, provider_revision: canonical.provider_revision,
       cursor: canonical.cursor, todo_read_model: canonical.todo_read_model,
       decision_read_from_provider: true, legacy_fallback_used: false}};
