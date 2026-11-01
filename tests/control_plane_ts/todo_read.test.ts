@@ -101,6 +101,7 @@ for (const provider of ["file", "sqlite"] as const) {
     assert.equal(bounded.full_text, undefined);
     assert.notEqual((bounded.todos as JsonObject[])[0].text, body);
     await assert.rejects(() => readTodo({...fullQuery, query: {...fullQuery.query, thin: true}}), /compact presentation/);
+    await assert.rejects(() => readTodo({...fullQuery, query: {...fullQuery.query, summary: true}}), /compact presentation/);
     await assert.rejects(() => readTodo({...fullQuery, query: {...fullQuery.query, full_text: "true"}}), /full_text/);
     const laterTodos = [row("todo_waiting", {status: "blocked", text: "Changed current requirement"}), todos.find(item => item.todo_id === "todo_archived")!]
       .sort((a, b) => String(a.todo_id).localeCompare(String(b.todo_id)));
