@@ -12,7 +12,7 @@ iptables permissions; a macOS Docker socket alone does not provide that boundary
 
 ## Select and freeze the native provider
 
-The first CLI entry for a log directory fetches the selected branch into
+The first CLI entry for a log directory fetches the selected revision into
 `.edgebench-source/checkout` and atomically freezes the effective source in
 `.edgebench-source/receipt.json`. Concurrent worker/judge startup shares that lock.
 Later entries reuse the frozen checkout without fetching, even if the branch,
@@ -22,8 +22,10 @@ before model/container entry. Use a new log directory to adopt a newer source;
 never repin an active or historical cohort.
 
 For a **new cohort with no explicit source options**, `source-default.json`
-selects the shared branch and the versioned
-[`nonfinite-checkpoint-v1` compatibility patch](compatibility/nonfinite-checkpoint-v1.patch).
+selects the reviewed integration commit
+[`e278cda3f4d2da3cf06aabf2df4daa99b9749501`](https://github.com/huangruiteng/EdgeBench/commit/e278cda3f4d2da3cf06aabf2df4daa99b9749501)
+and the versioned
+[`nonfinite-checkpoint-v2` compatibility patch](compatibility/nonfinite-checkpoint-v2.patch).
 This LoopX-owned patch fixes the native checkpoint representation of nonfinite
 released scores and metrics. Native scoring, report values and selection remain
 unchanged. Preparation verifies the asset digest and each touched file's exact
@@ -31,10 +33,13 @@ upstream blob and mode, applies the patch before provider import/installation,
 and creates a clean, reproducible Git commit with the fetched commit as its
 parent. The snapshot uses an explicit LoopX compatibility identity and the
 upstream commit time; it does not attribute the patch to an upstream author.
-Unrelated upstream changes can advance normally. A changed patch preimage,
-including a later upstream implementation of the fix, stops preparation without
-publishing a source directory. Review and update the bundled patch, or explicitly
-select the original source, before starting that new cohort.
+The default revision and patch are one reviewed pair: advancing the integration
+branch does not change a new default cohort. Updating the pair requires reviewing
+the new source and qualifying the native checkpoint transport again. A changed
+patch preimage, including a later upstream implementation of the fix, still stops
+preparation without publishing a source directory. Explicit branch/revision
+selection remains available and uses unmodified provider code; it does not
+silently inherit the default patch or its qualification.
 
 Patched sources use `edgebench_source_v2` receipts. `upstream_commit` is the
 fetched remote revision; `compatibility_patch` records the patch ID and SHA-256;

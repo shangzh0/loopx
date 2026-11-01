@@ -407,8 +407,8 @@ python -m benchmark.edgebench.checkpoint_judge --checkpoint-capture \
 
 Select the checkpoint provider through the same
 [shared EdgeBench source protocol](edgebench/README.md#select-and-freeze-the-native-provider)
-as the workers and judge. A new qualification cohort resolves the canonical
-integration branch and applies the reviewed native compatibility patch under
+as the workers and judge. A new default qualification cohort fetches the reviewed
+integration commit paired with the native compatibility patch under
 that protocol; its `.edgebench-source/receipt.json` records the effective provider
 commit, upstream revision and patch digest. Existing cohorts remain frozen.
 Patch representation changes receive a new digest and effective commit even
