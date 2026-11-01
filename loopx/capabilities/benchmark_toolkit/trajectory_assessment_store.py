@@ -130,23 +130,42 @@ def _request_usage_record(value: object) -> object:
         )
     return result
 
+
+def _usage_rows(path: Path, digest):
+    """Hash the exact captured bytes while parsing one JSONL record at a time."""
+    with path.open("rb") as stream:
+        for line_number, line in enumerate(stream, 1):
+            digest.update(line)
+            yield line_number, json.loads(line.decode("utf-8"))
+
+
+def _source_digest(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
 def _usage_capture(
     source_root: Path,
     artifact: str,
     session_id: str,
     *,
     include_incomplete: bool = False,
+    include_tool_context: bool = False,
     loopx_input_json: str | None = None,
     input_goal_id: str | None = None,
 ) -> dict:
-    data = _source_path(source_root, artifact).read_bytes()
+    path = _source_path(source_root, artifact)
+    digest = hashlib.sha256()
     events = []
+    tool_context = []
     # Transport only the provider's counter/lifecycle fields, not model text,
     # account metadata or tool outputs. TS owns all accounting decisions.
-    for line_number, line in enumerate(data.decode("utf-8").splitlines(), 1):
-        event = json.loads(line)
+    for line_number, event in _usage_rows(path, digest):
         if not isinstance(event, dict):
             raise ValueError("Usage capture contains a non-object event")
+        if include_tool_context:
+            from .trajectory_tool_context import project_tool_context
+            tool_context.extend(project_tool_context([event], first_line=line_number))
         payload = event.get("payload") or {}
         if not isinstance(payload, dict):
             raise ValueError("Usage capture contains a non-object payload")
@@ -229,6 +248,7 @@ def _usage_capture(
             "events": events,
             "session_id": session_id,
             "include_incomplete": include_incomplete,
+            **({"tool_context": tool_context} if include_tool_context else {}),
             **({"loopx_input_trace": observation, "input_goal_id": input_goal_id}
                if loopx_input_json is not None else {}),
         },
@@ -236,7 +256,7 @@ def _usage_capture(
     )
     return {
         "artifact": artifact,
-        "artifact_sha256": hashlib.sha256(data).hexdigest(),
+        "artifact_sha256": digest.hexdigest(),
         "projection": projection,
         **({"input_artifacts": input_artifacts} if input_artifacts else {}),
     }
@@ -248,14 +268,14 @@ def _captured_view(record: dict, field: str) -> dict | None:
         return None
     reason = None
     try:
-        data = _source_path(
+        path = _source_path(
             Path(record["source_root"]), captured["artifact"]
-        ).read_bytes()
-        if hashlib.sha256(data).hexdigest() != captured["artifact_sha256"]:
+        )
+        if _source_digest(path) != captured["artifact_sha256"]:
             reason = "source_changed"
         for artifact in captured.get("input_artifacts", []):
-            data = _source_path(Path(record["source_root"]), artifact["artifact"]).read_bytes()
-            if hashlib.sha256(data).hexdigest() != artifact["artifact_sha256"]:
+            path = _source_path(Path(record["source_root"]), artifact["artifact"])
+            if _source_digest(path) != artifact["artifact_sha256"]:
                 reason = "source_changed"
     except (OSError, ValueError):
         reason = "source_unavailable"
@@ -339,6 +359,7 @@ def register_pack(
     usage_jsonl: str | None = None,
     usage_session_id: str | None = None,
     include_incomplete_usage: bool = False,
+    include_tool_context: bool = False,
     loopx_input_json: str | None = None,
     native_outcomes_json: str | None = None,
     base_pack_id: str | None = None,
@@ -374,6 +395,8 @@ def register_pack(
         record["base_pack_id"] = _opaque(base_pack_id)
     if include_incomplete_usage and usage_jsonl is None:
         raise ValueError("include-incomplete-usage requires a usage capture")
+    if include_tool_context and usage_jsonl is None:
+        raise ValueError("include-tool-context requires a usage capture")
     if loopx_input_json is not None and usage_jsonl is None:
         raise ValueError("LoopX input observation requires a usage capture")
     if (usage_jsonl is None) != (usage_session_id is None):
@@ -384,6 +407,7 @@ def register_pack(
         record["solver_usage"] = _usage_capture(
             source_root, usage_jsonl, usage_session_id,
             include_incomplete=include_incomplete_usage,
+            include_tool_context=include_tool_context,
             loopx_input_json=loopx_input_json,
             input_goal_id=record["input"]["scope"]["goal_id"],
         )
