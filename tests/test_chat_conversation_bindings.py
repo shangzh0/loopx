@@ -36,10 +36,17 @@ def test_quota_backlog_observes_a_later_source_stop_before_new_admission(ordinar
         monkeypatch.setattr(external_conversations, "datetime", AfterBackoff)
         original = transport.core.read_request(row["request_ref"])
         assert transport.core._context_recovery_plan(original, discovery_only=True)["recovery_candidate"]
+        transport.admit("steward-app", provider.event("steward-app", "unrelated-stop", "/stop"))
+        assert transport.core._context_recovery_plan(original, discovery_only=True)["recovery_candidate"]
         transport.admit("notes-app", provider.event("notes-app", "later-stop", "/stop"))
         calls = ordinary[4].read_bytes()
         assert not transport.core._context_recovery_plan(original, discovery_only=True)["recovery_candidate"]
         assert ordinary[4].read_bytes() == calls
+        assert store.load_turn(row["session_id"], row["turn_id"]) == failed
+        transport.admit("notes-app", provider.event("notes-app", "future-request", "A new independent request"))
+        newer = next(x for x in transport.core.pending() if x.get("message") == "A new independent request")
+        completed = runtime.wait_for_turn(session_id=newer["session_id"], turn_id=newer["turn_id"], timeout_sec=10)
+        assert completed["status"] == "completed"
         assert store.load_turn(row["session_id"], row["turn_id"]) == failed
     finally:
         runtime.close()

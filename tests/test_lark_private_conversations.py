@@ -241,7 +241,7 @@ def connect_group(fixture):
     return store, runtime, provider, transport
 
 
-@pytest.mark.parametrize("info, pending", [("usageLimitExceeded", 1), ("cyberPolicy", 0)])
+@pytest.mark.parametrize("info, pending", [("usageLimitExceeded", 1), ("cyberPolicy", 0), (None, 0)])
 def test_delivered_quota_failure_stays_pending_across_restart_without_replaying(ordinary, info, pending):  # noqa: F811
     store, runtime, provider, transport = connect(ordinary)
     fake = ordinary[-2]
@@ -249,11 +249,12 @@ def test_delivered_quota_failure_stays_pending_across_restart_without_replaying(
         f'"codexErrorInfo": "{info}"').replace(
         '            print(json.dumps({"method": "item/agentMessage/delta", "params": {"threadId": "durable-thread", "turnId": active_turn, "delta": "Partial answer."}}), flush=True)\n', ''))
     try:
-        event = provider.event("notes-app", "quota-pending", "typed terminal failure")
+        event = provider.event("notes-app", "quota-pending",
+            "typed terminal failure" if info else "A normal successful request")
         transport.admit("notes-app", event)
         row = transport.core.pending()[0]
         failed = runtime.wait_for_turn(session_id=row["session_id"], turn_id=row["turn_id"], timeout_sec=10)
-        assert failed["status"] == "failed"
+        assert failed["status"] == ("failed" if info else "completed")
         assert (failed["error_code"] == "usage_limit_exceeded") == bool(pending)
         transport.reconcile()
         saved = json.loads((transport.root / f"{row['request_ref']}.json").read_text())
