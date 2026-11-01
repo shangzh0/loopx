@@ -621,6 +621,30 @@ def append_explore_result_events(
     if not require_ordered_prefix:
         for event in validated:
             _check_finding_measurement_execution(event)
+    return _append_validated_explore_result_events(
+        path, validated, expected_goal_id=expected_goal_id,
+        create_only_node_ids=create_only_node_ids,
+        require_ordered_prefix=require_ordered_prefix,
+        expected_event_ids=expected_event_ids,
+    )
+
+
+def _append_validated_explore_result_events(
+    path: Path,
+    validated: Sequence[dict[str, Any]],
+    *,
+    expected_goal_id: str,
+    create_only_node_ids: Sequence[str] = (),
+    require_ordered_prefix: bool = False,
+    expected_event_ids: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Shared file effect after the owning caller qualifies the events.
+
+    Ordinary writes validate new attribution above. Source reconciliation may
+    supply structurally validated history only after checking its registered
+    baseline, missing result ids and exact canonical snapshot. This internal
+    seam adds no public validation switch or historical-prefix claim.
+    """
     requested_ids = [str(event["event_id"]) for event in validated]
     if len(requested_ids) != len(set(requested_ids)):
         raise ValueError("Explore result event batch contains duplicate event ids")
@@ -639,6 +663,11 @@ def append_explore_result_events(
             if current_events[:len(validated)] != validated[:len(current_events)]:
                 raise ValueError("Explore result history differs from the required initial prefix")
             existing_by_id = {str(row["event_id"]): row for row in current_events}
+        elif expected_event_ids is not None:
+            existing_by_id = {
+                str(row["event_id"]): row for row in
+                load_explore_result_events_strict(log_path, goal_id=expected_goal_id)
+            }
         elif log_path.exists():
             for line in log_path.read_text(encoding="utf-8").split("\n"):
                 try:

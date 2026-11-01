@@ -14,7 +14,7 @@ from .result_log import (
     EVENT_KIND_FINDING,
     EVENT_KIND_NODE,
     PUBLIC_BOUNDARY,
-    append_explore_result_events,
+    _append_validated_explore_result_events,
     build_explore_result_projection,
     load_explore_result_events_strict,
 )
@@ -168,10 +168,14 @@ def reconcile_explore_source_history(
     }
     post_keys = canonical_keys
     if execute and selected_events:
-        append_receipt = append_explore_result_events(
+        # These are existing facts from the validated source, selected only for
+        # registered missing ids. They are neither new evidence nor an ordered
+        # archival prefix. Bind this plan to the canonical snapshot under lock.
+        append_receipt = _append_validated_explore_result_events(
             canonical_log_path,
             selected_events,
             expected_goal_id=goal_id,
+            expected_event_ids=[str(event["event_id"]) for event in canonical_events],
         )
         post_events = load_explore_result_events_strict(canonical_log_path, goal_id=goal_id)
         post_event_ids = {str(event.get("event_id") or "") for event in post_events}
