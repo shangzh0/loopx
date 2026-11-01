@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {readFileSync} from "node:fs";
 import {normalizeExploreMeasurements, normalizeExploreMeasurementsRequest, projectExploreMeasurementFeedback} from "../../loopx/control_plane/capabilities/explore_measurements.ts";
-import {normalizeExploreResultAttachment} from "../../loopx/control_plane/capabilities/explore_result_writeback.ts";
+import {normalizeExploreResultAttachment, produceExploreResultIntent} from "../../loopx/control_plane/capabilities/explore_result_writeback.ts";
 import {projectExploreTurnContext} from "../../loopx/control_plane/capabilities/explore_turn_context.ts";
 import {parseExploreHistoryPage, projectExploreHistory} from "../../loopx/control_plane/presentation/explore_history.ts";
 
@@ -12,7 +12,7 @@ const metric = {metric: "quality", value: 8, unit: "points", higher_is_better: t
 const finding = (id: string, value: number | null, extra = {}) => ({finding_id: id, node_id: "question-a",
   measurements: [{...metric, value, candidate_ref: `candidate:${id}`, evidence_ref: `result:${id}`, ...extra}]});
 
-test("measurements cannot cite another result than the attached executed candidate", () => {
+test("attachment transport preserves historical input while new ingestion rejects cross-result measurements", () => {
   const execution = {schema_version: "explore_execution_observation_v0",
     candidate_sha256: "a".repeat(64), result_candidate_sha256: "a".repeat(64),
     input_revision: metric.input_revision, planned_method_id: "probe", executed_method_id: "probe",
@@ -23,12 +23,20 @@ test("measurements cannot cite another result than the attached executed candida
     observation: "A measured result", interpretation: "Investigate the actual candidate",
     status: "tentative", evidence_refs: [metric.evidence_ref, "result:executed"],
     measurements: [metric], execution_observation: execution};
-  assert.throws(() => normalizeExploreResultAttachment({attachment}), /executed candidate's result/);
+  // Parsing precedes immutable primary-receipt recovery. It must preserve an
+  // old successful input; only a new effect qualifies its execution binding.
+  const normalized = normalizeExploreResultAttachment({attachment});
+  assert.deepEqual(normalized.measurements, [metric]);
+  const intent = (value: unknown) => produceExploreResultIntent({
+    projection: {explore_result: value}, receipt: {event_id: "receipt:synthetic"},
+  });
+  assert.throws(() => intent(normalized), /executed candidate's result/);
   assert.throws(() => normalizeExploreMeasurementsRequest({measurements: [metric],
     execution_observation: execution}), /executed candidate's result/);
   const matching = {...metric, evidence_ref: execution.result_ref};
   assert.deepEqual(normalizeExploreResultAttachment({attachment: {...attachment,
     measurements: [matching]}}).measurements, [matching]);
+  assert.equal(intent({...attachment, measurements: [matching]}).status, "intent");
   assert.deepEqual(normalizeExploreMeasurementsRequest({measurements: [matching],
     execution_observation: execution}).measurements, [matching]);
   assert.throws(() => normalizeExploreMeasurementsRequest({measurements: [{...matching,

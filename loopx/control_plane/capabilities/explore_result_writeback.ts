@@ -193,7 +193,10 @@ function normalizeAttachment(value: unknown, visionPacket?: unknown, linkedScope
     throw new EffectRuntimeRequestError("measurement_context requires measurements");
   }
   const measurements = Object.hasOwn(row, "measurements")
-    ? normalizeExploreMeasurements(row.measurements, row.measurement_context, execution) : null;
+    // Transport also reconstructs already committed inputs before replay is
+    // identified. New writes bind measurements in their precommit event plan;
+    // a new ingestion intent repeats that check below, never during replay.
+    ? normalizeExploreMeasurements(row.measurements, row.measurement_context) : null;
   if (measurements?.some(item => item.input_revision !== text(row.input_revision, "input_revision", 160)
     || !refs.includes(item.evidence_ref))) {
     throw new EffectRuntimeRequestError("measurements must retain this finding's input revision and evidence references");
@@ -314,6 +317,9 @@ export function planExploreQuestionEvolution(params: JsonObject): JsonObject {
 export function produceExploreResultIntent(params: JsonObject): JsonObject {
   const projection = requireJsonObject(params.projection, "writeback projection");
   const attachment = normalizeExploreResultAttachment({attachment: projection.explore_result});
+  if (attachment.measurements !== undefined) {
+    normalizeExploreMeasurements(attachment.measurements, undefined, attachment.execution_observation);
+  }
   const receipt = requireJsonObject(params.receipt, "writeback receipt");
   const source = text(receipt.event_id, "source receipt", 200);
   const key = createHash("sha256").update(source).digest("hex");

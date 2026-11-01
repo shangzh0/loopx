@@ -1436,6 +1436,10 @@ Completed delivery replays only the original durable ingestion intent, exact
 source and recorded time, matching canonical finding and existing Todo link.
 That path performs no graph or Todo mutation; missing delivery still requires the
 ordinary write/ownership checks, and conflicting attachment retries reject.
+CLI attachment parsing preserves structurally valid historical input until the
+existing primary owner matches the immutable retry. New primary writes and new
+ingestion intents still validate execution/measurement attribution before effects;
+parsing is not a new-write eligibility decision or a public bypass.
 
 历史兼容：执行与测量的一致性约束限制新写入，不能阻断旧记录及其后续更正的读取。
 当前 finding 若有归因矛盾，会返回 `measurement_error` 并排除该数量比较；历史仍保留
@@ -1445,3 +1449,6 @@ ordinary write/ownership checks, and conflicting attachment retries reject.
 保持预览与执行一致；不能把这一子集称为完整归档前缀。已完成交付仅重放原始持久化
 ingestion intent，并精确匹配来源、记录时间、canonical finding 与既有 Todo 关联；
 此路径不写图或 Todo。未完成交付仍须遵守普通写入与归属检查，冲突附件重试仍拒绝。
+CLI 附件解析保留结构合法的历史输入，由既有 primary owner 精确匹配不可变重试；
+新 primary 写入和新 ingestion intent 仍在产生效果前检查执行与测量归属。
+解析成功不代表新写入合格，也不提供公开的绕过参数。
